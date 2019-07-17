@@ -603,6 +603,35 @@ atom_ctts_free (AtomCTTS * ctts)
   g_free (ctts);
 }
 
+/* svmi is specified in ISO 23000-11 (Stereoscopic video application format)
+ * MPEG-A */
+static void
+atom_svmi_init (AtomSVMI * svmi)
+{
+  guint8 flags[3] = { 0, 0, 0 };
+
+  atom_full_init (&svmi->header, FOURCC_svmi, 0, 0, 0, flags);
+  svmi->stereoscopic_composition_type = 0x00;
+  svmi->is_left_first = FALSE;
+}
+
+AtomSVMI *
+atom_svmi_new (guint8 stereoscopic_composition_type, gboolean is_left_first)
+{
+  AtomSVMI *svmi = g_new0 (AtomSVMI, 1);
+
+  atom_svmi_init (svmi);
+  svmi->stereoscopic_composition_type = stereoscopic_composition_type;
+  svmi->is_left_first = is_left_first;
+  return svmi;
+}
+
+static void
+atom_svmi_free (AtomSVMI * svmi)
+{
+  g_free (svmi);
+}
+
 static void
 atom_stts_init (AtomSTTS * stts)
 {
@@ -697,6 +726,7 @@ atom_stbl_init (AtomSTBL * stbl)
   atom_stsz_init (&stbl->stsz);
   atom_stsc_init (&stbl->stsc);
   stbl->ctts = NULL;
+  stbl->svmi = NULL;
 
   atom_co64_init (&stbl->stco64);
 }
@@ -712,6 +742,9 @@ atom_stbl_clear (AtomSTBL * stbl)
   atom_stsz_clear (&stbl->stsz);
   if (stbl->ctts) {
     atom_ctts_free (stbl->ctts);
+  }
+  if (stbl->svmi) {
+    atom_svmi_free (stbl->svmi);
   }
   atom_stco64_clear (&stbl->stco64);
 }
@@ -1967,6 +2000,25 @@ atom_ctts_copy_data (AtomCTTS * ctts, guint8 ** buffer, guint64 * size,
 }
 
 guint64
+atom_svmi_copy_data (AtomSVMI * svmi, guint8 ** buffer, guint64 * size,
+    guint64 * offset)
+{
+  guint64 original_offset = *offset;
+
+  if (!atom_full_copy_data (&svmi->header, buffer, size, offset)) {
+    return 0;
+  }
+
+  prop_copy_uint8 (svmi->stereoscopic_composition_type, buffer, size, offset);
+  prop_copy_uint8 (svmi->is_left_first ? 1 : 0, buffer, size, offset);
+  /* stereo-mono change count */
+  prop_copy_uint32 (0, buffer, size, offset);
+
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+guint64
 atom_stco64_copy_data (AtomSTCO64 * stco64, guint8 ** buffer, guint64 * size,
     guint64 * offset)
 {
@@ -2120,6 +2172,11 @@ atom_stbl_copy_data (AtomSTBL * stbl, guint8 ** buffer, guint64 * size,
   }
   if (stbl->ctts && stbl->ctts->do_pts) {
     if (!atom_ctts_copy_data (stbl->ctts, buffer, size, offset)) {
+      return 0;
+    }
+  }
+  if (stbl->svmi) {
+    if (!atom_svmi_copy_data (stbl->svmi, buffer, size, offset)) {
       return 0;
     }
   }
@@ -4781,4 +4838,354 @@ build_uuid_xmp_atom (GstBuffer * xmp_data)
 
   return build_atom_info_wrapper ((Atom *) uuid, atom_uuid_copy_data,
       atom_uuid_free);
+}
+
+static guint64
+atom_st3d_copy_data (AtomST3D * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+
+  if (!atom_full_copy_data (&atom->header, buffer, size, offset)) {
+    return 0;
+  }
+  prop_copy_uint8 (atom->stereo_mode, buffer, size, offset);
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+AtomInfo *
+build_st3d_extension (GstVideoMultiviewMode mv_mode)
+{
+  AtomST3D *st3d = g_new0 (AtomST3D, 1);
+  guint8 flags[3] = { 0, 0, 0 };
+  guint8 stereo_mode = 0;
+
+  atom_full_init (&st3d->header, FOURCC_st3d, 0, 0, 0, flags);
+
+  switch (mv_mode) {
+    case GST_VIDEO_MULTIVIEW_MODE_TOP_BOTTOM:
+      stereo_mode = 1;
+      break;
+    case GST_VIDEO_MULTIVIEW_MODE_SIDE_BY_SIDE:
+      stereo_mode = 2;
+      break;
+    default:
+      break;
+  }
+  st3d->stereo_mode = stereo_mode;
+
+  return build_atom_info_wrapper ((Atom *) st3d, atom_st3d_copy_data,
+      atom_full_free);
+}
+
+static guint64
+atom_cbmp_copy_data (AtomCBMP * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+  if (!atom_full_copy_data (&atom->header, buffer, size, offset))
+    return 0;
+  prop_copy_uint32 (atom->layout, buffer, size, offset);
+  prop_copy_uint32 (atom->padding, buffer, size, offset);
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+static AtomCBMP *
+atom_cbmp_new (guint32 layout, guint32 padding)
+{
+  AtomCBMP *cbmp = g_new0 (AtomCBMP, 1);
+  guint8 flags[3] = { 0, 0, 0 };
+
+  atom_full_init (&cbmp->header, FOURCC_cbmp, 0, 0, 0, flags);
+
+  cbmp->layout = layout;
+  cbmp->padding = padding;
+
+  return cbmp;
+}
+
+static void
+atom_cbmp_free (AtomCBMP * cbmp)
+{
+  atom_full_clear (&cbmp->header);
+  g_free (cbmp);
+}
+
+static guint64
+atom_equi_copy_data (AtomEQUI * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+  if (!atom_full_copy_data (&atom->header, buffer, size, offset))
+    return 0;
+  prop_copy_uint32 (atom->projection_bounds_top, buffer, size, offset);
+  prop_copy_uint32 (atom->projection_bounds_bottom, buffer, size, offset);
+  prop_copy_uint32 (atom->projection_bounds_left, buffer, size, offset);
+  prop_copy_uint32 (atom->projection_bounds_right, buffer, size, offset);
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+static AtomEQUI *
+atom_equi_new (guint32 bounds_top, guint32 bounds_bottom,
+    guint32 bounds_left, guint32 bounds_right)
+{
+  AtomEQUI *equi = g_new0 (AtomEQUI, 1);
+  guint8 flags[3] = { 0, 0, 0 };
+
+  atom_full_init (&equi->header, FOURCC_equi, 0, 0, 0, flags);
+
+  equi->projection_bounds_top = bounds_top;
+  equi->projection_bounds_bottom = bounds_bottom;
+  equi->projection_bounds_left = bounds_left;
+  equi->projection_bounds_right = bounds_right;
+
+  return equi;
+}
+
+static void
+atom_equi_free (AtomEQUI * equi)
+{
+  atom_full_clear (&equi->header);
+  g_free (equi);
+}
+
+static guint64
+atom_prhd_copy_data (AtomPRHD * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+  if (!atom_full_copy_data (&atom->header, buffer, size, offset))
+    return 0;
+  prop_copy_int32 (atom->pose_yaw_degrees, buffer, size, offset);
+  prop_copy_int32 (atom->pose_pitch_degrees, buffer, size, offset);
+  prop_copy_int32 (atom->pose_roll_degrees, buffer, size, offset);
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+static void
+atom_prhd_init (AtomPRHD * prhd, gint32 pose_yaw_degrees,
+    gint32 pose_pitch_degrees, gint32 pose_roll_degrees)
+{
+  guint8 flags[3] = { 0, 0, 0 };
+  atom_full_init (&prhd->header, FOURCC_prhd, 0, 0, 0, flags);
+
+  prhd->pose_yaw_degrees = pose_yaw_degrees;
+  prhd->pose_pitch_degrees = pose_pitch_degrees;
+  prhd->pose_roll_degrees = pose_roll_degrees;
+}
+
+static void
+atom_prhd_clear (AtomPRHD * prhd)
+{
+  atom_full_clear (&prhd->header);
+}
+
+static guint64
+atom_proj_copy_data (AtomPROJ * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+  if (!atom_copy_data (&atom->header, buffer, size, offset))
+    return 0;
+  if (!atom_prhd_copy_data (&atom->prhd, buffer, size, offset))
+    return 0;
+  if (atom->cbmp) {
+    if (!atom_cbmp_copy_data (atom->cbmp, buffer, size, offset))
+      return 0;
+  } else if (atom->equi) {
+    if (!atom_equi_copy_data (atom->equi, buffer, size, offset))
+      return 0;
+  } else {
+    GST_WARNING ("Spherical projection map missing. Must be CBMP or EQUI");
+    return 0;
+  }
+
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+static void
+atom_proj_clear (AtomPROJ * proj)
+{
+  atom_clear (&proj->header);
+  atom_prhd_clear (&proj->prhd);
+  if (proj->cbmp)
+    atom_cbmp_free (proj->cbmp);
+  if (proj->equi)
+    atom_equi_free (proj->equi);
+}
+
+static void
+atom_proj_init (AtomPROJ * proj, gint32 pose_yaw_degrees,
+    gint32 pose_pitch_degrees, gint32 pose_roll_degrees)
+{
+  atom_header_set (&proj->header, FOURCC_proj, 0, 0);
+  atom_prhd_init (&proj->prhd, pose_yaw_degrees, pose_pitch_degrees,
+      pose_roll_degrees);
+}
+
+static guint64
+atom_svhd_copy_data (AtomSVHD * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+  if (!atom_full_copy_data (&atom->header, buffer, size, offset))
+    return 0;
+  prop_copy_null_terminated_string (atom->metadata_source, buffer, size,
+      offset);
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+static void
+atom_svhd_clear (AtomSVHD * svhd)
+{
+  atom_full_clear (&svhd->header);
+  g_free (svhd->metadata_source);
+}
+
+static void
+atom_svhd_init (AtomSVHD * svhd, const gchar * metadata_source)
+{
+  guint8 flags[3] = { 0, 0, 0 };
+  atom_full_init (&svhd->header, FOURCC_svhd, 0, 0, 0, flags);
+  svhd->metadata_source = g_strdup (metadata_source);
+}
+
+static guint64
+atom_sv3d_copy_data (AtomSV3D * atom, guint8 ** buffer,
+    guint64 * size, guint64 * offset)
+{
+  guint64 original_offset = *offset;
+
+  if (!atom_copy_data (&atom->header, buffer, size, offset))
+    return 0;
+  if (!atom_svhd_copy_data (&atom->svhd, buffer, size, offset))
+    return 0;
+  if (!atom_proj_copy_data (&atom->proj, buffer, size, offset))
+    return 0;
+
+  atom_write_size (buffer, size, offset, original_offset);
+  return *offset - original_offset;
+}
+
+static void
+atom_sv3d_free (AtomSV3D * sv3d)
+{
+  atom_clear (&sv3d->header);
+  atom_svhd_clear (&sv3d->svhd);
+  atom_proj_clear (&sv3d->proj);
+
+  g_free (sv3d);
+}
+
+static gboolean
+get_double_field_as_16_16 (const GstStructure * s, const gchar * field,
+    gint32 * res)
+{
+  gdouble val;
+  if (!gst_structure_get_double (s, field, &val))
+    return FALSE;
+  *res = (gint) (val * 65536.0);
+  return TRUE;
+}
+
+static gboolean
+get_double_field_as_0_32 (const GstStructure * s, const gchar * field,
+    guint32 * res)
+{
+  gdouble val;
+  if (!gst_structure_get_double (s, field, &val))
+    return FALSE;
+
+  if (val <= 0.0)
+    *res = 0;
+  else if (val >= 1.0)
+    *res = 1.0;
+  else
+    *res = (guint32) (val * (1UL << 32));
+  return TRUE;
+}
+
+AtomInfo *
+build_sv3d_extension (const GstStructure * spatial_media_info)
+{
+  AtomSV3D *sv3d = g_new0 (AtomSV3D, 1);
+  const gchar *metadata_source;
+  gint32 pose_yaw_degrees = 0, pose_pitch_degrees = 0, pose_roll_degrees = 0;
+  const gchar *projection_type;
+
+  atom_header_set (&sv3d->header, FOURCC_sv3d, 0, 0);
+
+  if ((metadata_source =
+          gst_structure_get_string (spatial_media_info, "metadata-source")))
+    atom_svhd_init (&sv3d->svhd, metadata_source);
+  else
+    atom_svhd_init (&sv3d->svhd, "");
+
+  get_double_field_as_16_16 (spatial_media_info, "pose-yaw-degrees",
+      &pose_yaw_degrees);
+  get_double_field_as_16_16 (spatial_media_info, "pose-pitch-degrees",
+      &pose_pitch_degrees);
+  get_double_field_as_16_16 (spatial_media_info, "pose-roll-degrees",
+      &pose_roll_degrees);
+
+  atom_proj_init (&sv3d->proj, pose_yaw_degrees, pose_pitch_degrees,
+      pose_roll_degrees);
+
+  projection_type =
+      gst_structure_get_string (spatial_media_info, "projection-type");
+  if (projection_type == NULL) {
+    GST_WARNING ("Missing spherical projection type information");
+    goto fail;
+  }
+
+  if (g_str_equal (projection_type, "cbmp")) {
+    guint32 layout = 0, padding = 0;
+    if (!gst_structure_get_uint (spatial_media_info, "cbmp-layout", &layout))
+      GST_WARNING ("Missing cubemap projection layout - assuming 0");
+    if (!gst_structure_get_uint (spatial_media_info, "cbmp-padding", &padding))
+      GST_WARNING ("Missing cubemap projection padding - assuming 0");
+    sv3d->proj.cbmp = atom_cbmp_new (layout, padding);
+  } else if (g_str_equal (projection_type, "equi")) {
+    guint32 top = 0, bottom = 0, left = 0, right = 0;
+
+    if (!get_double_field_as_0_32 (spatial_media_info, "equi-bounds-top", &top))
+      GST_WARNING ("Missing equirectangular projection top bound - assuming 0");
+    if (!get_double_field_as_0_32 (spatial_media_info, "equi-bounds-bottom",
+            &bottom))
+      GST_WARNING
+          ("Missing equirectangular projection bottom bound - assuming 0");
+    if (!get_double_field_as_0_32 (spatial_media_info, "equi-bounds-left",
+            &left))
+      GST_WARNING
+          ("Missing equirectangular projection left bound - assuming 0");
+    if (!get_double_field_as_0_32 (spatial_media_info, "equi-bounds-right",
+            &right))
+      GST_WARNING
+          ("Missing equirectangular projection right bound - assuming 0");
+
+    if (top == 0xFFFFFFFF)
+      top--;
+    if (bottom >= (0xFFFFFFFF - top))
+      bottom = (0xFFFFFFFF - top - 1);
+
+    if (left == 0xFFFFFFFF)
+      left--;
+    if (right >= (0xFFFFFFFF - left))
+      right = (0xFFFFFFFF - left - 1);
+
+    sv3d->proj.equi = atom_equi_new (top, bottom, left, right);
+  }
+
+  return build_atom_info_wrapper ((Atom *) sv3d, atom_sv3d_copy_data,
+      atom_sv3d_free);
+fail:
+  if (sv3d)
+    atom_sv3d_free (sv3d);
+  return NULL;
 }

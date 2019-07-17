@@ -343,6 +343,17 @@ G_BEGIN_DECLS
 #define FOURCC_svmi     GST_MAKE_FOURCC('s','v','m','i')
 #define FOURCC_scdi     GST_MAKE_FOURCC('s','c','d','i')
 
+/* Google spatial video atoms */
+#define FOURCC_st3d     GST_MAKE_FOURCC('s','t','3','d')
+#define FOURCC_sv3d     GST_MAKE_FOURCC('s','v','3','d')
+#define FOURCC_svhd     GST_MAKE_FOURCC('s','v','h','d')
+#define FOURCC_prhd     GST_MAKE_FOURCC('p','r','h','d')
+#define FOURCC_proj     GST_MAKE_FOURCC('p','r','o','j')
+#define FOURCC_cbmp     GST_MAKE_FOURCC('c','b','m','p')
+#define FOURCC_equi     GST_MAKE_FOURCC('e','q','u','i')
+#define FOURCC_mshp     GST_MAKE_FOURCC('m','s','h','p')
+#define FOURCC_mesh     GST_MAKE_FOURCC('m','e','s','h')
+
 /* Protected streams */
 #define FOURCC_encv     GST_MAKE_FOURCC('e','n','c','v')
 #define FOURCC_enca     GST_MAKE_FOURCC('e','n','c','a')

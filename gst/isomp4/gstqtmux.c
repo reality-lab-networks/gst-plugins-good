@@ -261,6 +261,8 @@ enum
   PROP_FRAGMENT_DURATION,
   PROP_STREAMABLE,
   PROP_RESERVED_MAX_DURATION,
+  PROP_SIDE_DATA_STEREO_3D,
+  PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
   PROP_RESERVED_DURATION_REMAINING,
   PROP_RESERVED_MOOV_UPDATE_PERIOD,
   PROP_RESERVED_BYTES_PER_SEC,
@@ -279,6 +281,8 @@ enum
 #define DEFAULT_FAST_START              FALSE
 #define DEFAULT_FAST_START_TEMP_FILE    NULL
 #define DEFAULT_MOOV_RECOV_FILE         NULL
+#define DEFAULT_SIDE_DATA_STEREO_3D     NULL
+#define DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE  NULL
 #define DEFAULT_FRAGMENT_DURATION       0
 #define DEFAULT_STREAMABLE              TRUE
 #ifndef GST_REMOVE_DEPRECATED
@@ -442,11 +446,27 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
           "of a crash during muxing. Null for disabled. (Experimental)",
           DEFAULT_MOOV_RECOV_FILE,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_SIDE_DATA_STEREO_3D,
+      g_param_spec_string ("add-side-data-stereo-3d",
+          "sd-stereo-3d",
+          "Hard code stereo-3rd side data. Possible options are: \n"
+          "                           - side-by-side\n"
+          "                           - top-bottom",
+          DEFAULT_SIDE_DATA_STEREO_3D,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class,
+      PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
+      g_param_spec_string ("add-side-data-spatial-projection-type",
+          "sd-spatial-projection-type",
+          "Hard code spatial projection type. Only supported one is \"equi\"",
+          DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_FRAGMENT_DURATION,
       g_param_spec_uint ("fragment-duration", "Fragment duration",
-          "Fragment durations in ms (produce a fragmented file if > 0)",
-          0, G_MAXUINT32, klass->format == GST_QT_MUX_FORMAT_ISML ?
-          2000 : DEFAULT_FRAGMENT_DURATION,
+          "Fragment durations in ms (produce a fragmented file if > 0)", 0,
+          G_MAXUINT32,
+          klass->format ==
+          GST_QT_MUX_FORMAT_ISML ? 2000 : DEFAULT_FRAGMENT_DURATION,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_STREAMABLE,
       g_param_spec_boolean ("streamable", "Streamable", streamable_desc,
@@ -455,8 +475,8 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
       g_param_spec_uint64 ("reserved-max-duration",
           "Reserved maximum file duration (ns)",
           "When set to a value > 0, reserves space for index tables at the "
-          "beginning of the file.",
-          0, G_MAXUINT64, DEFAULT_RESERVED_MAX_DURATION,
+          "beginning of the file.", 0, G_MAXUINT64,
+          DEFAULT_RESERVED_MAX_DURATION,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class,
       PROP_RESERVED_DURATION_REMAINING,
@@ -3789,6 +3809,7 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
   GList *ext_atom_list = NULL;
   gboolean sync = FALSE;
   int par_num, par_den;
+  const gchar *multiview_mode;
 
   qtpad->prepare_buf_func = NULL;
 
@@ -3848,6 +3869,93 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
       qtmux->trak_timescale : adjust_rate (framerate_num);
   GST_DEBUG_OBJECT (qtmux, "Rate of video track selected: %" G_GUINT32_FORMAT,
       rate);
+
+  printf ("User selected stereo_3d_type          %s\n", qtmux->stereo_3d_type);
+  printf ("User selected spatial_projection_type %s\n",
+      qtmux->spatial_projection_type);
+
+  multiview_mode = qtmux->stereo_3d_type;
+  if (multiview_mode && !qtpad->trak->mdia.minf.stbl.svmi) {
+    GstVideoMultiviewMode mode;
+
+    mode = gst_video_multiview_mode_from_caps_string (multiview_mode);
+
+    /* switch (mode) { */
+    /* case GST_VIDEO_MULTIVIEW_MODE_SIDE_BY_SIDE: */
+    /* qtpad->trak->mdia.minf.stbl.svmi = */
+    /* atom_svmi_new (0, */
+    /* GST_VIDEO_MULTIVIEW_MODE_TOP_BOTTOM); */
+    /* break; */
+    /* case GST_VIDEO_MULTIVIEW_MODE_ROW_INTERLEAVED: */
+    /* qtpad->trak->mdia.minf.stbl.svmi = */
+    /* atom_svmi_new (1, */
+    /* flags & GST_VIDEO_MULTIVIEW_FLAGS_RIGHT_VIEW_FIRST); */
+    /* break; */
+    /* case GST_VIDEO_MULTIVIEW_MODE_FRAME_BY_FRAME: */
+    /* qtpad->trak->mdia.minf.stbl.svmi = */
+    /* atom_svmi_new (2, */
+    /* flags & GST_VIDEO_MULTIVIEW_FLAGS_RIGHT_VIEW_FIRST); */
+    /* break; */
+    /* default: */
+    /* GST_DEBUG_OBJECT (qtmux, "Unsupported multiview-mode %s", */
+    /* multiview_mode); */
+    /* break; */
+    /* } */
+
+    if (mode != GST_VIDEO_MULTIVIEW_MODE_MONO) {
+      ext_atom = build_st3d_extension (mode);
+      if (ext_atom != NULL)
+        ext_atom_list = g_list_prepend (ext_atom_list, ext_atom);
+    }
+  }
+
+  /* Optionally inject spatial 360 video data */
+  {
+    GstStructure *fake_spatial_video_info = NULL;
+    fake_spatial_video_info = gst_structure_new_empty ("spatial-video-info");
+
+#define INT_16_16_TO_DOUBLE(f) ((f) / (double)(1 << 16))
+#define UINT_0_32_TO_DOUBLE(f) ((f) / (double)(1UL << 32))
+
+    if (qtmux->spatial_projection_type != NULL) {
+      gint32 pose_yaw_degrees = 0;
+      gint32 pose_pitch_degrees = 0;
+      gint32 pose_roll_degrees = 0;
+      guint32 projection_bounds_top = 0;
+      guint32 projection_bounds_bottom = 0;
+      guint32 projection_bounds_left = 0;
+      guint32 projection_bounds_right = 0;
+
+      /* getchar(); */
+      gst_structure_set (fake_spatial_video_info, "metadata-source",
+          G_TYPE_STRING, "custom_injection", NULL);
+      gst_structure_set (fake_spatial_video_info, "pose-yaw-degrees",
+          G_TYPE_DOUBLE, INT_16_16_TO_DOUBLE (pose_yaw_degrees),
+          "pose-pitch-degrees", G_TYPE_DOUBLE,
+          INT_16_16_TO_DOUBLE (pose_pitch_degrees), "pose-roll-degrees",
+          G_TYPE_DOUBLE, INT_16_16_TO_DOUBLE (pose_roll_degrees), NULL);
+
+      gst_structure_set (fake_spatial_video_info,
+          "projection-type", G_TYPE_STRING, "equi",
+          "equi-bounds-top", G_TYPE_DOUBLE,
+          UINT_0_32_TO_DOUBLE (projection_bounds_top), "equi-bounds-bottom",
+          G_TYPE_DOUBLE, UINT_0_32_TO_DOUBLE (projection_bounds_bottom),
+          "equi-bounds-left", G_TYPE_DOUBLE,
+          UINT_0_32_TO_DOUBLE (projection_bounds_left), "equi-bounds-right",
+          G_TYPE_DOUBLE, UINT_0_32_TO_DOUBLE (projection_bounds_right), NULL);
+      {
+        const GValue *spatial_video_info = (GValue *) fake_spatial_video_info;
+        /* gst_structure_get_value (structure, "spatial-video-info"); */
+
+        if (spatial_video_info
+            && GST_VALUE_HOLDS_STRUCTURE (spatial_video_info)) {
+          ext_atom = build_sv3d_extension (fake_spatial_video_info);
+          if (ext_atom != NULL)
+            ext_atom_list = g_list_prepend (ext_atom_list, ext_atom);
+        }
+      }
+    }
+  }
 
   /* set common properties */
   entry.width = width;
@@ -4437,6 +4545,12 @@ gst_qt_mux_get_property (GObject * object,
     case PROP_MOOV_RECOV_FILE:
       g_value_set_string (value, qtmux->moov_recov_file_path);
       break;
+    case PROP_SIDE_DATA_STEREO_3D:
+      g_value_set_string (value, qtmux->stereo_3d_type);
+      break;
+    case PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE:
+      g_value_set_string (value, qtmux->spatial_projection_type);
+      break;
     case PROP_FRAGMENT_DURATION:
       g_value_set_uint (value, qtmux->fragment_duration);
       break;
@@ -4527,6 +4641,14 @@ gst_qt_mux_set_property (GObject * object,
     case PROP_MOOV_RECOV_FILE:
       g_free (qtmux->moov_recov_file_path);
       qtmux->moov_recov_file_path = g_value_dup_string (value);
+      break;
+    case PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE:
+      g_free (qtmux->spatial_projection_type);
+      qtmux->spatial_projection_type = g_value_dup_string (value);
+      break;
+    case PROP_SIDE_DATA_STEREO_3D:
+      g_free (qtmux->stereo_3d_type);
+      qtmux->stereo_3d_type = g_value_dup_string (value);
       break;
     case PROP_FRAGMENT_DURATION:
       qtmux->fragment_duration = g_value_get_uint (value);
