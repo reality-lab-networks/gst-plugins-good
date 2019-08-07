@@ -229,6 +229,7 @@ struct _GstQTMux
 #endif
   gchar *fast_start_file_path;
   gchar *moov_recov_file_path;
+  guint32 side_data_fov;
   gchar *stereo_3d_type;
   gchar *spatial_projection_type;
   guint32 fragment_duration;

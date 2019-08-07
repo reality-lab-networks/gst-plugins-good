@@ -4870,6 +4870,9 @@ build_st3d_extension (GstVideoMultiviewMode mv_mode)
     case GST_VIDEO_MULTIVIEW_MODE_SIDE_BY_SIDE:
       stereo_mode = 2;
       break;
+    case GST_VIDEO_MULTIVIEW_MODE_MONO:
+      stereo_mode = 0;
+      break;
     default:
       break;
   }

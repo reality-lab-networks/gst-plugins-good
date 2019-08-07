@@ -262,6 +262,7 @@ enum
   PROP_STREAMABLE,
   PROP_RESERVED_MAX_DURATION,
   PROP_SIDE_DATA_STEREO_3D,
+  PROP_SIDE_DATA_FOV,
   PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
   PROP_RESERVED_DURATION_REMAINING,
   PROP_RESERVED_MOOV_UPDATE_PERIOD,
@@ -282,6 +283,7 @@ enum
 #define DEFAULT_FAST_START_TEMP_FILE    NULL
 #define DEFAULT_MOOV_RECOV_FILE         NULL
 #define DEFAULT_SIDE_DATA_STEREO_3D     NULL
+#define DEFAULT_SIDE_DATA_FOV           360
 #define DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE  NULL
 #define DEFAULT_FRAGMENT_DURATION       0
 #define DEFAULT_STREAMABLE              TRUE
@@ -460,6 +462,11 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
           "sd-spatial-projection-type",
           "Hard code spatial projection type. Only supported one is \"equi\"",
           DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
+          G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_SIDE_DATA_FOV,
+      g_param_spec_uint ("add-side-data-fov", "Field of View",
+          "Must BETimescale to use for the tracks (units per second, 0 is automatic)",
+          0, 360, DEFAULT_SIDE_DATA_FOV,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_FRAGMENT_DURATION,
       g_param_spec_uint ("fragment-duration", "Fragment duration",
@@ -3871,6 +3878,7 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
       rate);
 
   printf ("User selected stereo_3d_type          %s\n", qtmux->stereo_3d_type);
+  printf ("User selected fov                     %d\n", qtmux->side_data_fov);
   printf ("User selected spatial_projection_type %s\n",
       qtmux->spatial_projection_type);
 
@@ -3902,11 +3910,9 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
     /* break; */
     /* } */
 
-    if (mode != GST_VIDEO_MULTIVIEW_MODE_MONO) {
-      ext_atom = build_st3d_extension (mode);
-      if (ext_atom != NULL)
-        ext_atom_list = g_list_prepend (ext_atom_list, ext_atom);
-    }
+    ext_atom = build_st3d_extension (mode);
+    if (ext_atom != NULL)
+      ext_atom_list = g_list_prepend (ext_atom_list, ext_atom);
   }
 
   /* Optionally inject spatial 360 video data */
@@ -3926,6 +3932,11 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
       guint32 projection_bounds_left = 0;
       guint32 projection_bounds_right = 0;
 
+      if (qtmux->side_data_fov == 180) {
+        projection_bounds_left = 1 << 30;
+        projection_bounds_right = 1 << 30;
+      }
+
       /* getchar(); */
       gst_structure_set (fake_spatial_video_info, "metadata-source",
           G_TYPE_STRING, "custom_injection", NULL);
@@ -3936,7 +3947,7 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
           G_TYPE_DOUBLE, INT_16_16_TO_DOUBLE (pose_roll_degrees), NULL);
 
       gst_structure_set (fake_spatial_video_info,
-          "projection-type", G_TYPE_STRING, "equi",
+          "projection-type", G_TYPE_STRING, qtmux->spatial_projection_type,
           "equi-bounds-top", G_TYPE_DOUBLE,
           UINT_0_32_TO_DOUBLE (projection_bounds_top), "equi-bounds-bottom",
           G_TYPE_DOUBLE, UINT_0_32_TO_DOUBLE (projection_bounds_bottom),
@@ -4548,6 +4559,9 @@ gst_qt_mux_get_property (GObject * object,
     case PROP_SIDE_DATA_STEREO_3D:
       g_value_set_string (value, qtmux->stereo_3d_type);
       break;
+    case PROP_SIDE_DATA_FOV:
+      g_value_set_uint (value, qtmux->side_data_fov);
+      break;
     case PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE:
       g_value_set_string (value, qtmux->spatial_projection_type);
       break;
@@ -4649,6 +4663,9 @@ gst_qt_mux_set_property (GObject * object,
     case PROP_SIDE_DATA_STEREO_3D:
       g_free (qtmux->stereo_3d_type);
       qtmux->stereo_3d_type = g_value_dup_string (value);
+      break;
+    case PROP_SIDE_DATA_FOV:
+      qtmux->side_data_fov = g_value_get_uint (value);
       break;
     case PROP_FRAGMENT_DURATION:
       qtmux->fragment_duration = g_value_get_uint (value);
