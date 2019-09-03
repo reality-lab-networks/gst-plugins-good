@@ -3877,11 +3877,6 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
   GST_DEBUG_OBJECT (qtmux, "Rate of video track selected: %" G_GUINT32_FORMAT,
       rate);
 
-  printf ("User selected stereo_3d_type          %s\n", qtmux->stereo_3d_type);
-  printf ("User selected fov                     %d\n", qtmux->side_data_fov);
-  printf ("User selected spatial_projection_type %s\n",
-      qtmux->spatial_projection_type);
-
   multiview_mode = qtmux->stereo_3d_type;
   if (multiview_mode && !qtpad->trak->mdia.minf.stbl.svmi) {
     GstVideoMultiviewMode mode;
