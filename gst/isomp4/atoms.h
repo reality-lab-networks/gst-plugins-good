@@ -694,6 +694,7 @@ typedef struct _AtomTRAK
   AtomEDTS *edts;
   AtomMDIA mdia;
   AtomUDTA udta;
+  AtomUUID *uuid;
 
   /* some helper info for structural conformity checks */
   gboolean is_video;
@@ -1051,6 +1052,7 @@ AtomInfo *   build_ima_adpcm_extension   (gint channels, gint rate,
 AtomInfo *   build_uuid_xmp_atom         (GstBuffer * xmp);
 AtomInfo *   build_st3d_extension (GstVideoMultiviewMode mv_mode);
 AtomInfo *   build_sv3d_extension (const GstStructure *spatial_media_info);
+AtomUUID *   build_spatial_v1_uuid_atom  (GstVideoMultiviewMode mv_mode);
 
 /*
  * Meta tags functions

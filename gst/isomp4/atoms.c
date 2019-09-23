@@ -44,6 +44,7 @@
 #include "atoms.h"
 #include <string.h>
 #include <glib.h>
+#include <stdio.h>
 
 #include <gst/gst.h>
 #include <gst/base/gstbytewriter.h>
@@ -1288,6 +1289,7 @@ atom_trak_init (AtomTRAK * trak, AtomsContext * context)
   atom_udta_init (&trak->udta, context);
   trak->edts = NULL;
   atom_mdia_init (&trak->mdia, context);
+  trak->uuid = NULL;
 }
 
 AtomTRAK *
@@ -1308,6 +1310,9 @@ atom_trak_clear (AtomTRAK * trak)
     atom_edts_free (trak->edts);
   atom_udta_clear (&trak->udta);
   atom_mdia_clear (&trak->mdia);
+  if (trak->uuid)
+    atom_uuid_free (trak->uuid);
+
 }
 
 static void
@@ -2553,6 +2558,12 @@ atom_trak_copy_data (AtomTRAK * trak, guint8 ** buffer, guint64 * size,
 
   if (!atom_udta_copy_data (&trak->udta, buffer, size, offset)) {
     return 0;
+  }
+
+  if (trak->uuid) {
+    if (!atom_uuid_copy_data (trak->uuid, buffer, size, offset)) {
+      return 0;
+    }
   }
 
   atom_write_size (buffer, size, offset, original_offset);
@@ -4893,6 +4904,64 @@ atom_cbmp_copy_data (AtomCBMP * atom, guint8 ** buffer,
   prop_copy_uint32 (atom->padding, buffer, size, offset);
   atom_write_size (buffer, size, offset, original_offset);
   return *offset - original_offset;
+}
+
+AtomUUID *
+build_spatial_v1_uuid_atom (GstVideoMultiviewMode mv_mode)
+{
+
+  AtomUUID *uuid;
+  static const guint8 spatial_v1_uuid[] = {
+    0xff, 0xcc, 0x82, 0x63,
+    0xf8, 0x55, 0x4a, 0x93,
+    0x88, 0x14, 0x58, 0x7a,
+    0x02, 0x52, 0x1f, 0xdd
+  };
+
+  const char *stereo_mode = NULL;
+  char xml_payload[4096];
+  gsize payload_len = 0;
+  int chars_written = 0;
+  const char *payload_format =
+      "<rdf:SphericalVideo\n"
+      "xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"\n"
+      "xmlns:GSpherical=\"http://ns.google.com/videos/1.0/spherical/\">\n"
+      "<GSpherical:Spherical>true</GSpherical:Spherical>\n"
+      "<GSpherical:Stitched>true</GSpherical:Stitched>\n"
+      "<GSpherical:StitchingSoftware>Stitching software</GSpherical:StitchingSoftware>\n"
+      "<GSpherical:ProjectionType>equirectangular</GSpherical:ProjectionType>\n"
+      "<GSpherical:StereoMode>"
+      "%s" "</GSpherical:StereoMode>\n" "</rdf:SphericalVideo>\n";
+
+  switch (mv_mode) {
+    case GST_VIDEO_MULTIVIEW_MODE_TOP_BOTTOM:
+      stereo_mode = "top-bottom";
+      break;
+    case GST_VIDEO_MULTIVIEW_MODE_SIDE_BY_SIDE:
+      stereo_mode = "side-by-side";
+      break;
+    case GST_VIDEO_MULTIVIEW_MODE_MONO:
+      stereo_mode = "mono";
+      break;
+    default:
+      return NULL;
+  }
+
+  uuid = atom_uuid_new ();
+  memcpy (uuid->uuid, spatial_v1_uuid, 16);
+  chars_written =
+      snprintf (xml_payload, sizeof (xml_payload), payload_format, stereo_mode);
+  if (chars_written < 0) {
+    return NULL;
+  }
+
+  payload_len = strlen (xml_payload);
+
+  uuid->data = g_malloc (payload_len);
+  uuid->datalen = payload_len;
+  memcpy (uuid->data, xml_payload, payload_len);
+
+  return uuid;
 }
 
 static AtomCBMP *

@@ -123,6 +123,7 @@
 #include <gst/video/video.h>
 #include <gst/tag/tag.h>
 #include <gst/pbutils/pbutils.h>
+#include "atoms.h"
 
 #include <sys/types.h>
 #ifdef G_OS_WIN32
@@ -3882,28 +3883,7 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
     GstVideoMultiviewMode mode;
 
     mode = gst_video_multiview_mode_from_caps_string (multiview_mode);
-
-    /* switch (mode) { */
-    /* case GST_VIDEO_MULTIVIEW_MODE_SIDE_BY_SIDE: */
-    /* qtpad->trak->mdia.minf.stbl.svmi = */
-    /* atom_svmi_new (0, */
-    /* GST_VIDEO_MULTIVIEW_MODE_TOP_BOTTOM); */
-    /* break; */
-    /* case GST_VIDEO_MULTIVIEW_MODE_ROW_INTERLEAVED: */
-    /* qtpad->trak->mdia.minf.stbl.svmi = */
-    /* atom_svmi_new (1, */
-    /* flags & GST_VIDEO_MULTIVIEW_FLAGS_RIGHT_VIEW_FIRST); */
-    /* break; */
-    /* case GST_VIDEO_MULTIVIEW_MODE_FRAME_BY_FRAME: */
-    /* qtpad->trak->mdia.minf.stbl.svmi = */
-    /* atom_svmi_new (2, */
-    /* flags & GST_VIDEO_MULTIVIEW_FLAGS_RIGHT_VIEW_FIRST); */
-    /* break; */
-    /* default: */
-    /* GST_DEBUG_OBJECT (qtmux, "Unsupported multiview-mode %s", */
-    /* multiview_mode); */
-    /* break; */
-    /* } */
+    qtpad->trak->uuid = build_spatial_v1_uuid_atom (mode);
 
     ext_atom = build_st3d_extension (mode);
     if (ext_atom != NULL)
@@ -3951,7 +3931,6 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
           G_TYPE_DOUBLE, UINT_0_32_TO_DOUBLE (projection_bounds_right), NULL);
       {
         const GValue *spatial_video_info = (GValue *) fake_spatial_video_info;
-        /* gst_structure_get_value (structure, "spatial-video-info"); */
 
         if (spatial_video_info
             && GST_VALUE_HOLDS_STRUCTURE (spatial_video_info)) {
