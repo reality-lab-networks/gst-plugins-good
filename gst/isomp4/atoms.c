@@ -4906,8 +4906,10 @@ atom_cbmp_copy_data (AtomCBMP * atom, guint8 ** buffer,
   return *offset - original_offset;
 }
 
+#define UUID_ATOM_MAX_LEN 4096
 AtomUUID *
-build_spatial_v1_uuid_atom (GstVideoMultiviewMode mv_mode)
+build_spherical_v1_uuid_atom (GstVideoMultiviewMode mv_mode,
+    const char *spherical_v1_stitching_software_name, guint32 fov)
 {
 
   AtomUUID *uuid;
@@ -4919,19 +4921,47 @@ build_spatial_v1_uuid_atom (GstVideoMultiviewMode mv_mode)
   };
 
   const char *stereo_mode = NULL;
-  char xml_payload[4096];
+  char xml_buf[UUID_ATOM_MAX_LEN];
+  char *payload = xml_buf;
   gsize payload_len = 0;
-  int chars_written = 0;
-  const char *payload_format =
+  int bytes_written = 0;
+  int bytes_left = UUID_ATOM_MAX_LEN;
+
+  const char *spherical_v1_header =
       "<rdf:SphericalVideo\n"
       "xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"\n"
-      "xmlns:GSpherical=\"http://ns.google.com/videos/1.0/spherical/\">\n"
+      "xmlns:GSpherical=\"http://ns.google.com/videos/1.0/spherical/\">\n";
+
+  const char *spherical_v1_footer = "</rdf:SphericalVideo>\n";
+
+  const char *payload_format_360 =
       "<GSpherical:Spherical>true</GSpherical:Spherical>\n"
       "<GSpherical:Stitched>true</GSpherical:Stitched>\n"
-      "<GSpherical:StitchingSoftware>Stitching software</GSpherical:StitchingSoftware>\n"
+      "<GSpherical:StitchingSoftware>%s</GSpherical:StitchingSoftware>\n"
       "<GSpherical:ProjectionType>equirectangular</GSpherical:ProjectionType>\n"
-      "<GSpherical:StereoMode>"
-      "%s" "</GSpherical:StereoMode>\n" "</rdf:SphericalVideo>\n";
+      "<GSpherical:StereoMode>" "%s" "</GSpherical:StereoMode>\n";
+
+  /* Since there is only one known dimension */
+  const char *payload_format_fov =
+      "<GSpherical:CroppedAreaImageWidthPixels>2048</GSpherical:CroppedAreaImageWidthPixels>"
+      "<GSpherical:CroppedAreaImageHeightPixels>2160</GSpherical:CroppedAreaImageHeightPixels>"
+      "<GSpherical:FullPanoWidthPixels>4096</GSpherical:FullPanoWidthPixels>"
+      "<GSpherical:FullPanoHeightPixels>2160</GSpherical:FullPanoHeightPixels>"
+      "<GSpherical:CroppedAreaLeftPixels>1024</GSpherical:CroppedAreaLeftPixels>"
+      "<GSpherical:CroppedAreaTopPixels>0</GSpherical:CroppedAreaTopPixels>";
+
+  if (spherical_v1_stitching_software_name == NULL) {
+    GST_WARNING
+        ("Stitching software for Spatial V1 metadata must be specified. Spatial V1 atom not created");
+    return NULL;
+  }
+
+  if (fov != 360 && fov != 180) {
+    GST_WARNING
+        ("Invalid FOV of %d specified. Spherical V1 UUID atom not created",
+        fov);
+    return NULL;
+  }
 
   switch (mv_mode) {
     case GST_VIDEO_MULTIVIEW_MODE_TOP_BOTTOM:
@@ -4949,17 +4979,48 @@ build_spatial_v1_uuid_atom (GstVideoMultiviewMode mv_mode)
 
   uuid = atom_uuid_new ();
   memcpy (uuid->uuid, spatial_v1_uuid, 16);
-  chars_written =
-      snprintf (xml_payload, sizeof (xml_payload), payload_format, stereo_mode);
-  if (chars_written < 0) {
+
+  /* Spherical V1 footer */
+  bytes_written = snprintf (payload, bytes_left, "%s", spherical_v1_header);
+  if (bytes_written < 0) {
     return NULL;
   }
+  payload += bytes_written;
+  bytes_left = bytes_left - bytes_written;
 
-  payload_len = strlen (xml_payload);
+  /* Spherical V1 stereo information */
+  bytes_written =
+      snprintf (payload, bytes_left, payload_format_360,
+      spherical_v1_stitching_software_name, stereo_mode);
+  if (bytes_written < 0) {
+    return NULL;
+  }
+  payload += bytes_written;
+  bytes_left = bytes_left - bytes_written;
+
+  /* Spherical V1 option FOV */
+  if (fov == 180) {
+    bytes_written = snprintf (payload, bytes_left, "%s", payload_format_fov);
+    if (bytes_written < 0) {
+      return NULL;
+    }
+    payload += bytes_written;
+    bytes_left = bytes_left - bytes_written;
+  }
+
+  /* Spherical V1 footer */
+  bytes_written = snprintf (payload, bytes_left, "%s", spherical_v1_footer);
+  if (bytes_written < 0) {
+    return NULL;
+  }
+  payload += bytes_written;
+  bytes_left = bytes_left - bytes_written;
+
+  payload_len = strlen (xml_buf);
 
   uuid->data = g_malloc (payload_len);
   uuid->datalen = payload_len;
-  memcpy (uuid->data, xml_payload, payload_len);
+  memcpy (uuid->data, xml_buf, payload_len);
 
   return uuid;
 }

@@ -232,6 +232,7 @@ struct _GstQTMux
   guint32 side_data_fov;
   gchar *stereo_3d_type;
   gchar *spatial_projection_type;
+  gchar *spatial_v1_stitching_software_name;
   guint32 fragment_duration;
   /* Whether or not to work in 'streamable' mode and not
    * seek to rewrite headers - only valid for fragmented

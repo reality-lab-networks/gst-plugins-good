@@ -1052,7 +1052,9 @@ AtomInfo *   build_ima_adpcm_extension   (gint channels, gint rate,
 AtomInfo *   build_uuid_xmp_atom         (GstBuffer * xmp);
 AtomInfo *   build_st3d_extension (GstVideoMultiviewMode mv_mode);
 AtomInfo *   build_sv3d_extension (const GstStructure *spatial_media_info);
-AtomUUID *   build_spatial_v1_uuid_atom  (GstVideoMultiviewMode mv_mode);
+AtomUUID *   build_spherical_v1_uuid_atom  (GstVideoMultiviewMode mv_mode, 
+                                          const char* spatial_v1_stitching_software_name, 
+                                          guint32 fov);
 
 /*
  * Meta tags functions
