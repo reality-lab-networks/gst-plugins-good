@@ -265,7 +265,7 @@ enum
   PROP_SIDE_DATA_STEREO_3D,
   PROP_SIDE_DATA_FOV,
   PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
-  PROP_SIDE_DATA_SPHERICAL_V1_STITCHING_SOFTWARE_NAME,
+  PROP_SIDE_DATA_METADATA_SOURCE,
   PROP_RESERVED_DURATION_REMAINING,
   PROP_RESERVED_MOOV_UPDATE_PERIOD,
   PROP_RESERVED_BYTES_PER_SEC,
@@ -287,7 +287,7 @@ enum
 #define DEFAULT_SIDE_DATA_STEREO_3D     NULL
 #define DEFAULT_SIDE_DATA_FOV           360
 #define DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE      NULL
-#define DEFAULT_SIDE_DATA_SPHERICAL_V1_STITCHING_NAME  NULL
+#define DEFAULT_SIDE_DATA_METADATA_SOURCE              ""
 #define DEFAULT_FRAGMENT_DURATION       0
 #define DEFAULT_STREAMABLE              TRUE
 #ifndef GST_REMOVE_DEPRECATED
@@ -454,7 +454,7 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
   g_object_class_install_property (gobject_class, PROP_SIDE_DATA_STEREO_3D,
       g_param_spec_string ("add-side-data-stereo-3d",
           "sd-stereo-3d",
-          "Hard code stereo-3rd side data. Possible options are: \n"
+          "Hard code stereo-3d side data. Possible options are: \n"
           "                           - side-by-side\n"
           "                           - top-bottom",
           DEFAULT_SIDE_DATA_STEREO_3D,
@@ -467,15 +467,15 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
           DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class,
-      PROP_SIDE_DATA_SPHERICAL_V1_STITCHING_SOFTWARE_NAME,
-      g_param_spec_string ("add-spatial-v1-stitching-software-name",
-          "sd-v1-software-name",
-          "Software switching name as needed by Spatial Media V1 specification",
-          DEFAULT_SIDE_DATA_SPHERICAL_V1_STITCHING_NAME,
+      PROP_SIDE_DATA_METADATA_SOURCE,
+      g_param_spec_string ("add-spatial-metadata-source",
+          "sd-metadata-source",
+          "Name of source software responsible for the stitching of 3D video",
+          DEFAULT_SIDE_DATA_METADATA_SOURCE,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_SIDE_DATA_FOV,
       g_param_spec_uint ("add-side-data-fov", "Field of View",
-          "Must BETimescale to use for the tracks (units per second, 0 is automatic)",
+          "What FOV the spatial projection should inject - either 180 or 360",
           0, 360, DEFAULT_SIDE_DATA_FOV,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_FRAGMENT_DURATION,
@@ -3896,7 +3896,7 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
     /* Create atom containing Spherical Video V1 format */
     qtpad->trak->uuid =
         build_spherical_v1_uuid_atom (mode,
-        qtmux->spatial_v1_stitching_software_name, qtmux->side_data_fov);
+        qtmux->spherical_metadata_source, qtmux->side_data_fov);
 
     ext_atom = build_st3d_extension (mode);
     if (ext_atom != NULL)
@@ -3929,7 +3929,7 @@ gst_qt_mux_video_sink_set_caps (GstQTPad * qtpad, GstCaps * caps)
 
       /* getchar(); */
       gst_structure_set (fake_spatial_video_info, "metadata-source",
-          G_TYPE_STRING, "custom_injection", NULL);
+          G_TYPE_STRING, qtmux->spherical_metadata_source, NULL);
       gst_structure_set (fake_spatial_video_info, "pose-yaw-degrees",
           G_TYPE_DOUBLE, INT_16_16_TO_DOUBLE (pose_yaw_degrees),
           "pose-pitch-degrees", G_TYPE_DOUBLE,
@@ -4554,8 +4554,8 @@ gst_qt_mux_get_property (GObject * object,
     case PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE:
       g_value_set_string (value, qtmux->spatial_projection_type);
       break;
-    case PROP_SIDE_DATA_SPHERICAL_V1_STITCHING_SOFTWARE_NAME:
-      g_value_set_string (value, qtmux->spatial_v1_stitching_software_name);
+    case PROP_SIDE_DATA_METADATA_SOURCE:
+      g_value_set_string (value, qtmux->spherical_metadata_source);
       break;
     case PROP_FRAGMENT_DURATION:
       g_value_set_uint (value, qtmux->fragment_duration);
@@ -4652,9 +4652,9 @@ gst_qt_mux_set_property (GObject * object,
       g_free (qtmux->spatial_projection_type);
       qtmux->spatial_projection_type = g_value_dup_string (value);
       break;
-    case PROP_SIDE_DATA_SPHERICAL_V1_STITCHING_SOFTWARE_NAME:
-      g_free (qtmux->spatial_v1_stitching_software_name);
-      qtmux->spatial_v1_stitching_software_name = g_value_dup_string (value);
+    case PROP_SIDE_DATA_METADATA_SOURCE:
+      g_free (qtmux->spherical_metadata_source);
+      qtmux->spherical_metadata_source = g_value_dup_string (value);
       break;
     case PROP_SIDE_DATA_STEREO_3D:
       g_free (qtmux->stereo_3d_type);

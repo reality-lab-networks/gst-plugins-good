@@ -4909,7 +4909,7 @@ atom_cbmp_copy_data (AtomCBMP * atom, guint8 ** buffer,
 #define UUID_ATOM_MAX_LEN 4096
 AtomUUID *
 build_spherical_v1_uuid_atom (GstVideoMultiviewMode mv_mode,
-    const char *spherical_v1_stitching_software_name, guint32 fov)
+    const char *spherical_v1_metadata_source, guint32 fov)
 {
 
   AtomUUID *uuid;
@@ -4934,7 +4934,7 @@ build_spherical_v1_uuid_atom (GstVideoMultiviewMode mv_mode,
 
   const char *spherical_v1_footer = "</rdf:SphericalVideo>\n";
 
-  const char *payload_format_360 =
+  const char *payload_stereo_format =
       "<GSpherical:Spherical>true</GSpherical:Spherical>\n"
       "<GSpherical:Stitched>true</GSpherical:Stitched>\n"
       "<GSpherical:StitchingSoftware>%s</GSpherical:StitchingSoftware>\n"
@@ -4949,12 +4949,6 @@ build_spherical_v1_uuid_atom (GstVideoMultiviewMode mv_mode,
       "<GSpherical:FullPanoHeightPixels>2160</GSpherical:FullPanoHeightPixels>"
       "<GSpherical:CroppedAreaLeftPixels>1024</GSpherical:CroppedAreaLeftPixels>"
       "<GSpherical:CroppedAreaTopPixels>0</GSpherical:CroppedAreaTopPixels>";
-
-  if (spherical_v1_stitching_software_name == NULL) {
-    GST_WARNING
-        ("Stitching software for Spatial V1 metadata must be specified. Spatial V1 atom not created");
-    return NULL;
-  }
 
   if (fov != 360 && fov != 180) {
     GST_WARNING
@@ -4990,8 +4984,8 @@ build_spherical_v1_uuid_atom (GstVideoMultiviewMode mv_mode,
 
   /* Spherical V1 stereo information */
   bytes_written =
-      snprintf (payload, bytes_left, payload_format_360,
-      spherical_v1_stitching_software_name, stereo_mode);
+      snprintf (payload, bytes_left, payload_stereo_format,
+      spherical_v1_metadata_source, stereo_mode);
   if (bytes_written < 0) {
     return NULL;
   }
@@ -5013,8 +5007,6 @@ build_spherical_v1_uuid_atom (GstVideoMultiviewMode mv_mode,
   if (bytes_written < 0) {
     return NULL;
   }
-  payload += bytes_written;
-  bytes_left = bytes_left - bytes_written;
 
   payload_len = strlen (xml_buf);
 
