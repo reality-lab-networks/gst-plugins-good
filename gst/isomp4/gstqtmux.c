@@ -452,7 +452,7 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
           DEFAULT_MOOV_RECOV_FILE,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_SIDE_DATA_STEREO_3D,
-      g_param_spec_string ("add-side-data-stereo-3d",
+      g_param_spec_string ("side-data-stereo-3d",
           "sd-stereo-3d",
           "Hard code stereo-3d side data. Possible options are: \n"
           "                           - side-by-side\n"
@@ -461,20 +461,20 @@ gst_qt_mux_class_init (GstQTMuxClass * klass)
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class,
       PROP_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
-      g_param_spec_string ("add-side-data-spatial-projection-type",
+      g_param_spec_string ("side-data-spatial-projection-type",
           "sd-spatial-projection-type",
           "Hard code spatial projection type. Only supported one is \"equi\"",
           DEFAULT_SIDE_DATA_SPATIAL_PROJECTION_TYPE,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class,
       PROP_SIDE_DATA_METADATA_SOURCE,
-      g_param_spec_string ("add-spatial-metadata-source",
+      g_param_spec_string ("spatial-metadata-source",
           "sd-metadata-source",
           "Name of source software responsible for the stitching of 3D video",
           DEFAULT_SIDE_DATA_METADATA_SOURCE,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_SIDE_DATA_FOV,
-      g_param_spec_uint ("add-side-data-fov", "Field of View",
+      g_param_spec_uint ("side-data-fov", "Field of View",
           "What FOV the spatial projection should inject - either 180 or 360",
           0, 360, DEFAULT_SIDE_DATA_FOV,
           G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS));
